@@ -7,7 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Features\AuditTrail\" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="Features\Logging\" />
     <Folder Include="Features\Export\" />
     <Folder Include="Features\Import\" />

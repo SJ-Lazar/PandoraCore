@@ -5,4 +5,5 @@
   <Project Path="Pandora.Api/Pandora.Api.csproj" />
   <Project Path="Pandora.Console/Pandora.Console.csproj" />
   <Project Path="Pandora.Core/Pandora.Core.csproj" />
+  <Project Path="Pandora.Tests/Pandora.Tests.csproj" Id="2617bb54-f144-41d1-a511-7f0d099ca872" />
 </Solution>
