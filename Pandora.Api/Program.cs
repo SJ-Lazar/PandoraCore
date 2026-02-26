@@ -1,6 +1,16 @@
 using Pandora.Core.Features.AuditTrail;
+using Pandora.Core.Features.Export;
+using Pandora.Core.Features.Logging;
+using Pandora.Core.Features.Users;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseCoreSerilog();
 
 // Add services to the container.
 
@@ -8,8 +18,12 @@ builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddAuditTrail();
+builder.Services.AddExport();
+builder.Services.AddUsers();
 
 var app = builder.Build();
+
+app.UseSerilogRequestLogging();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

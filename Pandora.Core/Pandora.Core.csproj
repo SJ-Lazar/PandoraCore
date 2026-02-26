@@ -8,22 +8,21 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Features\Logging\" />
-    <Folder Include="Features\Export\" />
     <Folder Include="Features\Import\" />
-    <Folder Include="Features\Filter\" />
-    <Folder Include="Features\Identity\" />
+    <Folder Include="Features\SearchSortFilter\" />
     <Folder Include="Features\SystemSettings\" />
     <Folder Include="Features\RateLimiting\" />
     <Folder Include="Features\Versioning\" />
     <Folder Include="Features\Records\" />
     <Folder Include="Features\Sort\" />
     <Folder Include="Features\Search\" />
-    <Folder Include="Features\Pagination\" />
-    <Folder Include="Features\Users\" />
   </ItemGroup>
 
 </Project>

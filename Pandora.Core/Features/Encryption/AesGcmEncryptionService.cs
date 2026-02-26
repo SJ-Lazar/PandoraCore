@@ -3,6 +3,8 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Pandora.Core.Features.Encryption;
 
@@ -10,12 +12,14 @@ public sealed class AesGcmEncryptionService : IEncryptionService
 {
     private const int StreamBufferSize = 128 * 1024;
     private readonly EncryptionOptions _options;
+    private readonly ILogger<AesGcmEncryptionService> _logger;
 
-    public AesGcmEncryptionService(EncryptionOptions options)
+    public AesGcmEncryptionService(EncryptionOptions options, ILogger<AesGcmEncryptionService>? logger = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         options.Validate();
         _options = options;
+        _logger = logger ?? NullLogger<AesGcmEncryptionService>.Instance;
     }
 
     public byte[] EncryptBytes(ReadOnlySpan<byte> data)
@@ -51,6 +55,7 @@ public sealed class AesGcmEncryptionService : IEncryptionService
         var minimum = _options.NonceSize + _options.TagSize;
         if (encryptedData.Length < minimum)
         {
+            _logger.LogWarning("Encrypted payload is too small: {Length} bytes. Minimum length is {Minimum} bytes.", encryptedData.Length, minimum);
             throw new CryptographicException("Encrypted payload is too small.");
         }
 
@@ -104,13 +109,13 @@ public sealed class AesGcmEncryptionService : IEncryptionService
     public Task EncryptFileAsync(string inputPath, string outputPath, CancellationToken cancellationToken = default)
     {
         ValidateFileArguments(inputPath, outputPath);
-        return ProcessFileAsync(inputPath, outputPath, EncryptStreamAsync, cancellationToken);
+        return ExecuteWithLoggingAsync("encrypt", inputPath, outputPath, () => ProcessFileAsync(inputPath, outputPath, EncryptStreamAsync, cancellationToken));
     }
 
     public Task DecryptFileAsync(string inputPath, string outputPath, CancellationToken cancellationToken = default)
     {
         ValidateFileArguments(inputPath, outputPath);
-        return ProcessFileAsync(inputPath, outputPath, DecryptStreamAsync, cancellationToken);
+        return ExecuteWithLoggingAsync("decrypt", inputPath, outputPath, () => ProcessFileAsync(inputPath, outputPath, DecryptStreamAsync, cancellationToken));
     }
 
     private static void ValidateFileArguments(string inputPath, string outputPath)
@@ -277,5 +282,26 @@ public sealed class AesGcmEncryptionService : IEncryptionService
         }
 
         return true;
+    }
+
+    private Task ExecuteWithLoggingAsync(string operation, string inputPath, string outputPath, Func<Task> action)
+    {
+        _logger.LogInformation("Starting {Operation} of {InputPath} to {OutputPath}.", operation, inputPath, outputPath);
+
+        return ExecuteAsync();
+
+        async Task ExecuteAsync()
+        {
+            try
+            {
+                await action().ConfigureAwait(false);
+                _logger.LogInformation("Completed {Operation} of {InputPath} to {OutputPath}.", operation, inputPath, outputPath);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to {Operation} {InputPath} to {OutputPath}.", operation, inputPath, outputPath);
+                throw;
+            }
+        }
     }
 }
