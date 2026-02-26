@@ -15,7 +15,6 @@
     <Folder Include="Features\Export\" />
     <Folder Include="Features\Import\" />
     <Folder Include="Features\Filter\" />
-    <Folder Include="Features\Encryption\" />
     <Folder Include="Features\Identity\" />
     <Folder Include="Features\SystemSettings\" />
     <Folder Include="Features\RateLimiting\" />
