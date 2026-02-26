@@ -15,13 +15,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Features\Import\" />
-    <Folder Include="Features\SearchSortFilter\" />
     <Folder Include="Features\SystemSettings\" />
     <Folder Include="Features\Versioning\" />
-    <Folder Include="Features\Records\" />
     <Folder Include="Features\Sort\" />
-    <Folder Include="Features\Search\" />
   </ItemGroup>
 
 </Project>
