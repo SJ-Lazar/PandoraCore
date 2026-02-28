@@ -15,10 +15,30 @@ public class WorkItem
     public List<WorkItemTag> Tags { get; } = new();
     public List<WorkItemAttachment> Attachments { get; } = new();
 
+    public Guid? AssignedUserId { get; private set; }
+    public Guid? AssignedTeamId { get; private set; }
+
+    public bool IsTemplate { get; set; } = false;
+    public string? TemplateName { get; set; }
+
+    public List<LineItem> LineItems { get; set; } = new();
+
     public void AddChild(WorkItem child)
     {
         child.Parent = this;
         Children.Add(child);
+    }
+
+    public void AssignToUser(Guid userId)
+    {
+        AssignedUserId = userId;
+        AssignedTeamId = null;
+    }
+
+    public void AssignToTeam(Guid teamId)
+    {
+        AssignedTeamId = teamId;
+        AssignedUserId = null;
     }
 
     public void AddComment(WorkItemComment comment) => Comments.Add(comment);

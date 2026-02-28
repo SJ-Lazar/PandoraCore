@@ -5,7 +5,8 @@ namespace Pandora.Core.Features.WorkItem;
 
 public class InMemoryWorkItemService : IWorkItemService
 {
-    private readonly ConcurrentDictionary<Guid, WorkItem> _items = new();
+private readonly ConcurrentDictionary<Guid, WorkItem> _items = new();
+private readonly List<(Guid WorkItemId, WorkItemState OldState, WorkItemState NewState, DateTime Timestamp)> _stateAuditTrail = new();
 
     public WorkItem Create(string name, string description)
     {
@@ -57,7 +58,37 @@ public class InMemoryWorkItemService : IWorkItemService
     public bool TransitionState(Guid workItemId, WorkItemState newState)
     {
         if (_items.TryGetValue(workItemId, out var item))
-            return item.TransitionTo(newState);
+        {
+            if (!item.CanTransitionTo(newState))
+                return false;
+            var oldState = item.State;
+            var transitioned = item.TransitionTo(newState);
+            if (transitioned)
+            {
+                _stateAuditTrail.Add((workItemId, oldState, newState, DateTime.UtcNow));
+            }
+            return transitioned;
+        }
+        return false;
+    }
+
+    public bool AssignToUser(Guid workItemId, Guid userId)
+    {
+        if (_items.TryGetValue(workItemId, out var item))
+        {
+            item.AssignToUser(userId);
+            return true;
+        }
+        return false;
+    }
+
+    public bool AssignToTeam(Guid workItemId, Guid teamId)
+    {
+        if (_items.TryGetValue(workItemId, out var item))
+        {
+            item.AssignToTeam(teamId);
+            return true;
+        }
         return false;
     }
 }

@@ -14,4 +14,7 @@ public interface IWorkItemService
     void AddTag(Guid workItemId, WorkItemTag tag);
     void AddAttachment(Guid workItemId, WorkItemAttachment attachment);
     bool TransitionState(Guid workItemId, WorkItemState newState);
+
+    bool AssignToUser(Guid workItemId, Guid userId);
+    bool AssignToTeam(Guid workItemId, Guid teamId);
 }
