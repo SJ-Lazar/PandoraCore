@@ -6,6 +6,8 @@ namespace Pandora.Core.Features.Workflow;
 public class InMemoryWorkflowService
 {
     private readonly ConcurrentDictionary<Guid, Workflow> _workflows = new();
+    private readonly ConcurrentDictionary<Guid, WorkflowTemplate> _templates = new();
+    private readonly ConcurrentDictionary<(Guid WorkflowId, int StepIndex), ConcurrentDictionary<Guid, byte>> _stepApprovals = new();
     // Audit trail entry
     public record AuditEntry(DateTime Timestamp, Guid WorkflowId, string Action, Guid? UserId = null, int? StepIndex = null, string? Details = null);
     private readonly List<AuditEntry> _auditTrail = new();
@@ -18,6 +20,16 @@ public class InMemoryWorkflowService
     {
         if (template.Steps.Count != workItems.Count)
             throw new InvalidOperationException("Number of steps and work items must match template.");
+
+        _templates[template.Id] = template;
+
+        for (var index = 0; index < template.Steps.Count; index++)
+        {
+            if (template.Steps[index].WorkItemId == Guid.Empty)
+            {
+                template.Steps[index].WorkItemId = workItems[index].Id;
+            }
+        }
 
         var workflow = new Workflow
         {
@@ -75,19 +87,16 @@ public class InMemoryWorkflowService
     {
         if (!_workflows.TryGetValue(workflowId, out var wf)) return false;
         var template = GetTemplateForWorkflow(wf);
-        if (template == null || stepIndex >= template.Steps.Count) return false;
+        if (template == null || stepIndex < 0 || stepIndex >= template.Steps.Count) return false;
+        if (wf.CurrentStepIndex != stepIndex) return false;
+
         var step = template.Steps[stepIndex];
         if (!step.ApproverUserIds.Contains(userId)) return false;
-        // Track approvals (simple: set IsApproved for All, or per-user for Any)
-        if (policy == ApprovalPolicy.All)
-        {
-            step.IsApproved = true;
-        }
-        else
-        {
-            // For Any, approve if any user approves
-            step.IsApproved = true;
-        }
+
+        var approvals = _stepApprovals.GetOrAdd((workflowId, stepIndex), _ => new ConcurrentDictionary<Guid, byte>());
+        approvals[userId] = 0;
+
+        step.IsApproved = IsStepApproved(workflowId, step, stepIndex, policy);
         _auditTrail.Add(new AuditEntry(DateTime.UtcNow, workflowId, "StepApproved", userId, stepIndex));
         return true;
     }
@@ -97,13 +106,22 @@ public class InMemoryWorkflowService
     {
         if (!_workflows.TryGetValue(workflowId, out var wf)) return false;
         if (wf.LifecycleState == WorkflowLifecycleState.Completed || wf.LifecycleState == WorkflowLifecycleState.Cancelled) return false;
+
         var template = GetTemplateForWorkflow(wf);
         if (template == null) return false;
         if (wf.CurrentStepIndex >= template.Steps.Count) return false;
+
         var step = template.Steps[wf.CurrentStepIndex];
-        if (!IsStepApproved(step, policy)) return false;
+        if (!IsStepApproved(workflowId, step, wf.CurrentStepIndex, policy)) return false;
+
+        if (wf.LifecycleState == WorkflowLifecycleState.Created)
+        {
+            wf.LifecycleState = WorkflowLifecycleState.Started;
+        }
+
         wf.CurrentStepIndex++;
         _auditTrail.Add(new AuditEntry(DateTime.UtcNow, workflowId, "StepAdvanced", null, wf.CurrentStepIndex));
+
         if (wf.CurrentStepIndex >= template.Steps.Count)
         {
             wf.LifecycleState = WorkflowLifecycleState.Completed;
@@ -119,15 +137,27 @@ public class InMemoryWorkflowService
     // Helper: get template for workflow (stub, should be replaced with real lookup)
     private WorkflowTemplate? GetTemplateForWorkflow(Workflow wf)
     {
-        // In real implementation, fetch from template store
-        return null;
+        return _templates.TryGetValue(wf.TemplateId, out var template) ? template : null;
     }
 
     // Helper: check if step is approved
-    private bool IsStepApproved(WorkflowStep step, ApprovalPolicy policy)
+    private bool IsStepApproved(Guid workflowId, WorkflowStep step, int stepIndex, ApprovalPolicy policy)
     {
-        // For All: require IsApproved true
-        // For Any: require IsApproved true (extend for per-user approval tracking if needed)
-        return step.IsApproved;
+        if (step.ApproverUserIds.Count == 0)
+        {
+            return true;
+        }
+
+        if (!_stepApprovals.TryGetValue((workflowId, stepIndex), out var approvals))
+        {
+            return false;
+        }
+
+        return policy switch
+        {
+            ApprovalPolicy.All => step.ApproverUserIds.All(approvals.ContainsKey),
+            ApprovalPolicy.Any => step.ApproverUserIds.Any(approvals.ContainsKey),
+            _ => false
+        };
     }
 }
