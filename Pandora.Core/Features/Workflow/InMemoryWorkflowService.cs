@@ -8,6 +8,9 @@ public class InMemoryWorkflowService
     private readonly ConcurrentDictionary<Guid, Workflow> _workflows = new();
     private readonly ConcurrentDictionary<Guid, WorkflowTemplate> _templates = new();
     private readonly ConcurrentDictionary<(Guid WorkflowId, int StepIndex), ConcurrentDictionary<Guid, byte>> _stepApprovals = new();
+    private readonly ConcurrentDictionary<(Guid WorkflowId, int StepIndex), DateTime> _stepDeadlines = new();
+    private readonly ConcurrentDictionary<(Guid WorkflowId, int StepIndex), byte> _stepRemindersSent = new();
+    private readonly ConcurrentDictionary<(Guid WorkflowId, int StepIndex), byte> _stepEscalations = new();
     // Audit trail entry
     public record AuditEntry(DateTime Timestamp, Guid WorkflowId, string Action, Guid? UserId = null, int? StepIndex = null, string? Details = null);
     private readonly List<AuditEntry> _auditTrail = new();
@@ -41,6 +44,7 @@ public class InMemoryWorkflowService
         };
 
         _workflows[workflow.Id] = workflow;
+        InitializeStepTiming(workflow.Id, template, workflow.CurrentStepIndex, DateTime.UtcNow);
         _auditTrail.Add(new AuditEntry(DateTime.UtcNow, workflow.Id, "Created"));
         return workflow;
     }
@@ -68,10 +72,22 @@ public class InMemoryWorkflowService
         if (!_workflows.TryGetValue(workflowId, out var wf)) return false;
         var template = GetTemplateForWorkflow(wf);
         if (template == null || stepIndex >= template.Steps.Count) return false;
+        if (wf.CurrentStepIndex != stepIndex) return false;
         var step = template.Steps[stepIndex];
         if (!EvaluateStepRule(step, "CanSkip")) return false;
         wf.CurrentStepIndex++;
         _auditTrail.Add(new AuditEntry(DateTime.UtcNow, workflowId, "StepSkipped", null, stepIndex));
+
+        if (wf.CurrentStepIndex >= template.Steps.Count)
+        {
+            wf.LifecycleState = WorkflowLifecycleState.Completed;
+            _auditTrail.Add(new AuditEntry(DateTime.UtcNow, workflowId, "Completed"));
+        }
+        else
+        {
+            InitializeStepTiming(workflowId, template, wf.CurrentStepIndex, DateTime.UtcNow);
+            wf.LifecycleState = WorkflowLifecycleState.InProgress;
+        }
         return true;
     }
 
@@ -129,8 +145,54 @@ public class InMemoryWorkflowService
         }
         else
         {
+            InitializeStepTiming(workflowId, template, wf.CurrentStepIndex, DateTime.UtcNow);
             wf.LifecycleState = WorkflowLifecycleState.InProgress;
         }
+        return true;
+    }
+
+    public DateTime? GetCurrentStepDeadline(Guid workflowId)
+    {
+        if (!_workflows.TryGetValue(workflowId, out var wf)) return null;
+        return _stepDeadlines.TryGetValue((workflowId, wf.CurrentStepIndex), out var deadline)
+            ? deadline
+            : null;
+    }
+
+    public bool TrySendReminderForCurrentStep(Guid workflowId, DateTime utcNow)
+    {
+        if (!_workflows.TryGetValue(workflowId, out var wf)) return false;
+        if (wf.LifecycleState == WorkflowLifecycleState.Completed || wf.LifecycleState == WorkflowLifecycleState.Cancelled) return false;
+
+        var key = (workflowId, wf.CurrentStepIndex);
+        if (!_stepDeadlines.TryGetValue(key, out var deadline)) return false;
+        if (utcNow < deadline) return false;
+        if (!_stepRemindersSent.TryAdd(key, 0)) return false;
+
+        _auditTrail.Add(new AuditEntry(utcNow, workflowId, "StepReminderSent", null, wf.CurrentStepIndex, $"Deadline exceeded at {deadline:o}"));
+        return true;
+    }
+
+    public bool TryEscalateCurrentStep(Guid workflowId, DateTime utcNow)
+    {
+        if (!_workflows.TryGetValue(workflowId, out var wf)) return false;
+        if (wf.LifecycleState == WorkflowLifecycleState.Completed || wf.LifecycleState == WorkflowLifecycleState.Cancelled) return false;
+
+        var template = GetTemplateForWorkflow(wf);
+        if (template == null || wf.CurrentStepIndex >= template.Steps.Count) return false;
+
+        var key = (workflowId, wf.CurrentStepIndex);
+        if (!_stepDeadlines.TryGetValue(key, out var deadline)) return false;
+        if (utcNow < deadline) return false;
+        if (!_stepEscalations.TryAdd(key, 0)) return false;
+
+        var step = template.Steps[wf.CurrentStepIndex];
+        if (step.AutoReassignOnEscalation && step.EscalationUserIds.Count > 0 && wf.CurrentStepIndex < wf.WorkItems.Count)
+        {
+            wf.WorkItems[wf.CurrentStepIndex].AssignToUser(step.EscalationUserIds[0]);
+        }
+
+        _auditTrail.Add(new AuditEntry(utcNow, workflowId, "StepEscalated", null, wf.CurrentStepIndex, $"Deadline exceeded at {deadline:o}"));
         return true;
     }
 
@@ -159,5 +221,25 @@ public class InMemoryWorkflowService
             ApprovalPolicy.Any => step.ApproverUserIds.Any(approvals.ContainsKey),
             _ => false
         };
+    }
+
+    private void InitializeStepTiming(Guid workflowId, WorkflowTemplate template, int stepIndex, DateTime startedAtUtc)
+    {
+        if (stepIndex < 0 || stepIndex >= template.Steps.Count) return;
+
+        var step = template.Steps[stepIndex];
+        var key = (workflowId, stepIndex);
+
+        _stepRemindersSent.TryRemove(key, out _);
+        _stepEscalations.TryRemove(key, out _);
+
+        if (step.SlaDuration.HasValue && step.SlaDuration.Value > TimeSpan.Zero)
+        {
+            _stepDeadlines[key] = startedAtUtc.Add(step.SlaDuration.Value);
+        }
+        else
+        {
+            _stepDeadlines.TryRemove(key, out _);
+        }
     }
 }

@@ -33,6 +33,9 @@ public class WorkflowStep
     public List<Guid> ApproverUserIds { get; set; } = new(); // Users who must approve this step
     public bool IsApproved { get; set; } = false;
     public List<string> Rules { get; set; } = new(); // Rule expressions or references
+    public TimeSpan? SlaDuration { get; set; }
+    public List<Guid> EscalationUserIds { get; set; } = new();
+    public bool AutoReassignOnEscalation { get; set; }
 }
 
 public class WorkflowTemplate
