@@ -1,5 +1,7 @@
 using Pandora.Core.Features.AuditTrail;
 using Pandora.Core.Features.Export;
+using Pandora.Core.Features.Identity;
+using Pandora.Core.Features.Import;
 using Pandora.Core.Features.Logging;
 using Pandora.Core.Features.Users;
 using Pandora.Core.Features.Workflow;
@@ -21,7 +23,9 @@ builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.AddAuditTrail();
 builder.Services.AddExport();
+builder.Services.AddSingleton<Import>();
 builder.Services.AddUsers();
+builder.Services.AddIdentityAuth();
 builder.Services.AddSingleton<IWorkItemService, InMemoryWorkItemService>();
 builder.Services.AddSingleton<InMemoryWorkflowService>();
 
