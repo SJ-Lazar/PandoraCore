@@ -2,6 +2,7 @@ using Pandora.Core.Features.AuditTrail;
 using Pandora.Core.Features.Export;
 using Pandora.Core.Features.Logging;
 using Pandora.Core.Features.Users;
+using Pandora.Core.Features.Workflow;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -20,6 +21,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddAuditTrail();
 builder.Services.AddExport();
 builder.Services.AddUsers();
+builder.Services.AddSingleton<InMemoryWorkflowService>();
 
 var app = builder.Build();
 
