@@ -3,6 +3,7 @@ using Pandora.Core.Features.Export;
 using Pandora.Core.Features.Logging;
 using Pandora.Core.Features.Users;
 using Pandora.Core.Features.Workflow;
+using Pandora.Core.Features.WorkItem;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -21,6 +22,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddAuditTrail();
 builder.Services.AddExport();
 builder.Services.AddUsers();
+builder.Services.AddSingleton<IWorkItemService, InMemoryWorkItemService>();
 builder.Services.AddSingleton<InMemoryWorkflowService>();
 
 var app = builder.Build();
